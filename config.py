@@ -8,8 +8,8 @@ INFO = pygame.display.Info()
 SCREEN_W = INFO.current_w
 SCREEN_H = INFO.current_h
 
-WIN_W = 300
-WIN_H = 300
+WIN_W = 280
+WIN_H = 280
 FPS = 30
 
 # ── 平台检测 ──
