@@ -1,8 +1,17 @@
 """桌宠配置常量"""
+import pygame
 
-# 窗口
-WIN_WIDTH = 200
-WIN_HEIGHT = 200
+# 屏幕大小（动态获取）
+pygame.init()
+INFO = pygame.display.Info()
+SCREEN_W = INFO.current_w
+SCREEN_H = INFO.current_h
+
+# 字体（WSL 下使用 Windows 字体文件）
+FONT_PATH = "/mnt/c/Windows/Fonts/msyh.ttc"
+FONT_SIZE = 13
+FONT_SIZE_SMALL = 12
+
 FPS = 30
 
 # 颜色
@@ -10,16 +19,16 @@ COLORKEY = (255, 0, 255)   # 品红色 = 透明通道
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 
-# 宠物（阶段一用圆形占位）
+# 宠物
 PET_RADIUS = 40
-PET_COLOR = (100, 180, 255)  # 浅蓝色
+PET_COLOR = (100, 180, 255)
 
 # 游走
-WALK_SPEED = 1.5            # 每帧移动像素
-IDLE_MIN = 60               # 最短待机帧数（约2秒）
-IDLE_MAX = 180              # 最长待机帧数（约6秒）
+WALK_SPEED = 1.5
+IDLE_MIN = 60
+IDLE_MAX = 180
 
-# 呼吸动画
-BREATHE_SPEED = 0.02        # 呼吸变化速度
-BREATHE_MIN = 0.95          # 最小缩放
-BREATHE_MAX = 1.05          # 最大缩放
+# 呼吸
+BREATHE_SPEED = 0.02
+BREATHE_MIN = 0.95
+BREATHE_MAX = 1.05

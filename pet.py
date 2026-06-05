@@ -4,7 +4,7 @@ import math
 import pygame
 from config import (
     PET_RADIUS, PET_COLOR,
-    WIN_WIDTH, WIN_HEIGHT, FPS,
+    SCREEN_W, SCREEN_H, FPS,
     WALK_SPEED, IDLE_MIN, IDLE_MAX,
     BREATHE_SPEED, BREATHE_MIN, BREATHE_MAX,
 )
@@ -159,8 +159,8 @@ class Pet:
         """随机选一个目标位置开始走"""
         # 确保目标离当前位置有一定距离
         margin = self.radius + 10
-        self.target_x = random.uniform(margin, WIN_WIDTH - margin)
-        self.target_y = random.uniform(margin, WIN_HEIGHT - margin)
+        self.target_x = random.uniform(margin, SCREEN_W - margin)
+        self.target_y = random.uniform(margin, SCREEN_H - margin)
         self.state = "walking"
 
     def _update_walking(self):

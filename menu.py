@@ -1,27 +1,35 @@
 """右键菜单 — 显示、选择、回调"""
 import pygame
-from config import WHITE, BLACK
+from config import WHITE, BLACK, FONT_PATH
 
 
 class Menu:
     """手绘右键菜单"""
 
-    def __init__(self, items):
+    def __init__(self, items, font=None):
         """
         items: [(文字, 回调函数), ...]
+        font: pygame.font.Font 实例（需支持中文）
         """
-        self.items = items           # [(text, callback), ...]
+        self.items = items
         self.visible = False
         self.x = 0
         self.y = 0
-        self.width = 120
+        self.width = 140
         self.item_height = 28
-        self.font = pygame.font.SysFont("microsoftyaheimicrosoftyaheiui", 13)
         self.padding = 8
         self.hover_index = -1
 
+        # 使用传入的字体，否则尝试微软雅黑
+        if font:
+            self.font = font
+        else:
+            try:
+                self.font = pygame.font.Font(FONT_PATH, 13)
+            except Exception:
+                self.font = pygame.font.SysFont("arial", 13)
+
     def show(self, x, y):
-        """在指定位置显示菜单"""
         self.visible = True
         self.x = x
         self.y = y
@@ -32,7 +40,6 @@ class Menu:
         self.hover_index = -1
 
     def handle_mouse_move(self, mx, my):
-        """鼠标移动时检测悬浮"""
         if not self.visible:
             return
         rel_y = my - self.y
@@ -46,7 +53,6 @@ class Menu:
             self.hover_index = -1
 
     def handle_click(self, mx, my):
-        """点击时执行对应回调，返回是否消费了点击"""
         if not self.visible:
             return False
         rel_x = mx - self.x
@@ -55,28 +61,23 @@ class Menu:
             idx = rel_y // self.item_height
             if 0 <= idx < len(self.items):
                 self.hide()
-                self.items[idx][1]()  # 执行回调
+                self.items[idx][1]()
                 return True
-        # 点在外面 → 关闭
         self.hide()
         return False
 
     def draw(self, screen):
-        """绘制菜单"""
         if not self.visible:
             return
         h = len(self.items) * self.item_height
-        # 背景
         bg = pygame.Surface((self.width, h))
         bg.fill(WHITE)
         bg.set_alpha(230)
         screen.blit(bg, (self.x, self.y))
-        # 边框
         pygame.draw.rect(screen, BLACK, (self.x, self.y, self.width, h), 1)
-        # 文字
+
         for i, (text, _) in enumerate(self.items):
             if i == self.hover_index:
-                # 高亮
                 highlight = pygame.Surface((self.width - 2, self.item_height - 2))
                 highlight.fill((200, 220, 255))
                 screen.blit(highlight, (self.x + 1, self.y + i * self.item_height + 1))

@@ -1,10 +1,10 @@
-"""桌宠入口 — 透明窗口 + 主循环 + 菜单 + Hermes 联动"""
+"""桌宠入口 — 全屏透明窗口 + 菜单 + Hermes 联动"""
 import pygame
 import sys
 import random
 import subprocess
 import threading
-from config import WIN_WIDTH, WIN_HEIGHT, FPS, COLORKEY, WHITE, BLACK
+from config import SCREEN_W, SCREEN_H, FPS, COLORKEY, WHITE, BLACK, FONT_PATH, FONT_SIZE_SMALL
 from pet import Pet
 from menu import Menu
 
@@ -12,14 +12,17 @@ from menu import Menu
 def main():
     pygame.init()
 
+    # 全屏无边框窗口（品红色 = 透明）
     screen = pygame.display.set_mode(
-        (WIN_WIDTH, WIN_HEIGHT),
+        (SCREEN_W, SCREEN_H),
         pygame.NOFRAME
     )
     pygame.display.set_caption("桌宠")
     screen.set_colorkey(COLORKEY)
+
     clock = pygame.time.Clock()
 
+    # 窗口置顶
     try:
         import ctypes
         hwnd = pygame.display.get_wm_info()["window"]
@@ -27,57 +30,58 @@ def main():
     except Exception:
         pass
 
-    pet = Pet(WIN_WIDTH // 2, WIN_HEIGHT // 2)
+    # 宠物初始在屏幕中央
+    pet = Pet(SCREEN_W // 2, SCREEN_H // 2)
+
+    # ── 字体 ──
+    try:
+        font_small = pygame.font.Font(FONT_PATH, FONT_SIZE_SMALL)
+        font_menu = pygame.font.Font(FONT_PATH, 13)
+    except Exception:
+        font_small = pygame.font.SysFont("arial", 12)
+        font_menu = pygame.font.SysFont("arial", 13)
 
     # ── 对话气泡 ──
     bubble_text = ""
     bubble_timer = 0
-    hermes_busy = False  # Hermes 正在回答中
 
     def say(text, duration=120):
         nonlocal bubble_text, bubble_timer
         bubble_text = text
         bubble_timer = duration
 
-    # ── Hermes 调用（后台线程）──
+    # ── Hermes 后台调用 ──
     def ask_hermes(question):
-        """后台调用 Hermes AI，拿到结果后显示气泡"""
-        nonlocal hermes_busy
-        hermes_busy = True
-        say("🤔 思考中...", 9999)  # 一直显示直到结果
+        nonlocal bubble_text, bubble_timer
+        say("🤔 思考中...", 9999)
         try:
             result = subprocess.run(
                 ["hermes", "chat", "-q", question, "-Q"],
                 capture_output=True, text=True, timeout=30,
                 cwd="/home/luochuan",
             )
-            # 过滤掉 session_id 行
             answer = result.stdout.strip()
             if "session_id:" in answer:
                 answer = answer.split("\n", 1)[-1].strip()
             if answer:
-                say(answer, 360)  # 显示 12 秒
+                say(answer, 360)
             else:
                 say("😅 没回答上来...", 120)
         except subprocess.TimeoutExpired:
             say("⏰ 思考超时了~", 120)
         except Exception:
-            say("❌ Hermes 调用失败", 120)
-        finally:
-            hermes_busy = False
+            say("❌ Hermes 调用失败...", 120)
 
     def ask_hermes_async(question):
-        """非阻塞调用 Hermes"""
         t = threading.Thread(target=ask_hermes, args=(question,), daemon=True)
         t.start()
 
-    # ── 笑话库 ──
+    # ── 笑话 ──
     jokes = [
         "为什么程序员分不清万圣节和圣诞节？\n因为 Oct 31 == Dec 25！",
         "SQL 走进酒吧，看到两张桌子，\n问：我能 JOIN 你们吗？",
-        "程序员最讨厌什么数字？\n1024，因为加班到 1024。",
-        "Java 和 C 去吃饭，C 说：\n我指针忘带了。Java：没事，我不需要。",
         "bug 不叫 bug，叫：\n未被文档记录的特性。",
+        "Java 和 C 去吃饭，C 说：\n我指针忘带了。Java：没事，我不需要。",
     ]
 
     # ── 菜单 ──
@@ -85,11 +89,11 @@ def main():
         ("讲个笑话", lambda: say(random.choice(jokes), 180)),
         ("你在干嘛？", lambda: say(_status_msg(pet), 120)),
         ("问 AI：今天学什么？",
-         lambda: ask_hermes_async("我是一个Java初学者，今天应该学什么？给一个简短的学习建议")),
+         lambda: ask_hermes_async("我是一名Java初学者，今天应该学什么？给一个简短的学习建议")),
         ("问 AI：随机小知识",
          lambda: ask_hermes_async("给我一个有趣的编程小知识，简短一点")),
         ("退出", lambda: _quit()),
-    ])
+    ], font_menu)
 
     def _status_msg(p):
         if p.state == "walking":
@@ -124,7 +128,7 @@ def main():
                 elif event.button == 3:
                     dist = ((mx - pet.x) ** 2 + (my - pet.y) ** 2) ** 0.5
                     if dist <= pet.radius:
-                        menu.show(int(pet.x) + 20, int(pet.y) - 100)
+                        menu.show(int(pet.x) + 30, int(pet.y) - 120)
 
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:
@@ -146,7 +150,7 @@ def main():
         screen.fill(COLORKEY)
 
         if bubble_text:
-            _draw_bubble(screen, pet, bubble_text, clock)
+            _draw_bubble(screen, pet, bubble_text, font_small)
 
         pet.draw(screen)
         menu.draw(screen)
@@ -155,10 +159,8 @@ def main():
         clock.tick(FPS)
 
 
-def _draw_bubble(screen, pet, text, clock):
+def _draw_bubble(screen, pet, text, font):
     """在宠物上方绘制对话气泡"""
-    import pygame
-    font = pygame.font.SysFont("microsoftyaheimicrosoftyaheiui", 12)
     lines = text.split("\n")
     line_surfs = [font.render(line, True, BLACK) for line in lines]
     max_w = max(s.get_width() for s in line_surfs) + 16
