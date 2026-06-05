@@ -1,13 +1,16 @@
 """桌宠配置常量"""
 import pygame
 
-# 屏幕大小（动态获取）
 pygame.init()
 INFO = pygame.display.Info()
 SCREEN_W = INFO.current_w
 SCREEN_H = INFO.current_h
 
-# 字体（WSL 下使用 Windows 字体文件）
+# 窗口大小（本地坐标，宠物在这个范围内活动）
+WIN_W = 300
+WIN_H = 300
+
+# 字体
 FONT_PATH = "/mnt/c/Windows/Fonts/msyh.ttc"
 FONT_SIZE = 13
 FONT_SIZE_SMALL = 12
@@ -15,7 +18,7 @@ FONT_SIZE_SMALL = 12
 FPS = 30
 
 # 颜色
-COLORKEY = (255, 0, 255)   # 品红色 = 透明通道
+COLORKEY = (255, 0, 255)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 
