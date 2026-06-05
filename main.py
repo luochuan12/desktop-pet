@@ -41,9 +41,6 @@ def main():
         font_small = pygame.font.SysFont("arial", 12)
         font_menu = pygame.font.SysFont("arial", 13)
 
-    # ── 裁剪状态 ──
-    clip_expanded = False
-
     # ── 对话气泡 ──
     bubble_text = ""
     bubble_timer = 0
@@ -101,7 +98,38 @@ def main():
         pygame.quit()
         sys.exit()
 
+    # ── 拖拽时窗口跟随 ──
+    drag_pet_x = 0  # 拖拽开始时宠物在窗口内的位置
+    drag_pet_y = 0
+    drag_start_mx = 0
+    drag_start_my = 0
+    drag_start_wx = 0
+    drag_start_wy = 0
+
+    def update_clip():
+        """根据当前状态更新窗口裁剪"""
+        if menu.visible:
+            # 菜单在 pet.x+20, pet.y-100, 宽140, 高 5*28=140
+            menu_cx = pet.x + 20 + 70
+            menu_cy = pet.y - 100 + 70
+            # 包含宠物 + 菜单的大椭圆
+            center_x = (pet.x + menu_cx) // 2
+            center_y = (pet.y + menu_cy) // 2
+            rx = abs(menu_cx - pet.x) // 2 + PET_RADIUS + 10
+            ry = abs(menu_cy - pet.y) // 2 + PET_RADIUS + 10
+            wu.set_round_clip(hwnd, center_x, center_y, max(rx, ry))
+        elif bubble_text and bubble_timer > 0:
+            # 气泡在宠物上方，扩大裁剪
+            wu.set_round_clip(hwnd, pet.x, pet.y - 30, PET_RADIUS + 40)
+        else:
+            # 默认紧贴宠物
+            wu.set_round_clip(hwnd, pet.x, pet.y, PET_RADIUS + 5)
+
+    # ── 初始裁剪 ──
+    update_clip()
+
     # ── 主循环 ──
+    frame = 0
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -112,48 +140,59 @@ def main():
 
                 if menu.visible:
                     if menu.handle_click(mx, my):
+                        update_clip()
                         continue
 
                 if event.button == 1:
                     dist = ((mx - pet.x) ** 2 + (my - pet.y) ** 2) ** 0.5
                     if dist <= pet.radius + 10:
                         pet.start_drag(mx, my)
+                        # 记录拖拽起始位置（用于窗口跟随）
+                        drag_pet_x = pet.x
+                        drag_pet_y = pet.y
+                        drag_start_mx = mx
+                        drag_start_my = my
+                        drag_start_wx = win_x
+                        drag_start_wy = win_y
 
                 elif event.button == 3:
                     dist = ((mx - pet.x) ** 2 + (my - pet.y) ** 2) ** 0.5
                     if dist <= pet.radius + 10:
                         menu.show(int(pet.x) + 20, int(pet.y) - 100)
+                        update_clip()
 
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:
                     pet.end_drag()
+                    # 拖拽结束，把宠物放回窗口中央附近
+                    # 保持宠物在窗口内的合法位置
+                    pet.x = max(30, min(WIN_W - 30, pet.x))
+                    pet.y = max(30, min(WIN_H - 30, pet.y))
 
             elif event.type == pygame.MOUSEMOTION:
                 mx, my = pygame.mouse.get_pos()
-                pet.update_drag(mx, my)
+
+                if pet.dragging:
+                    # 拖拽时：窗口跟随鼠标，宠物位置不变
+                    dx = mx - drag_start_mx
+                    dy = my - drag_start_my
+                    win_x = max(0, min(SCREEN_W - WIN_W, drag_start_wx + dx))
+                    win_y = max(0, min(SCREEN_H - WIN_H, drag_start_wy + dy))
+                    wu.move_to(hwnd, win_x, win_y)
+                    # 保持宠物在窗口内固定位置
+                    pet.x = drag_pet_x
+                    pet.y = drag_pet_y
+                else:
+                    pet.update_drag(mx, my)
+
                 menu.handle_mouse_move(mx, my)
 
         # ── 更新 ──
         pet.update()
 
-        # 拖拽中移动窗口
-        if pet.dragging:
-            mx, my = pygame.mouse.get_pos()
-            if pet.x < 60 and win_x > 0:
-                win_x = max(0, win_x - 4)
-                wu.move_to(hwnd, win_x, win_y)
-            elif pet.x > WIN_W - 60 and win_x < SCREEN_W - WIN_W:
-                win_x = min(SCREEN_W - WIN_W, win_x + 4)
-                wu.move_to(hwnd, win_x, win_y)
-            if pet.y < 60 and win_y > 0:
-                win_y = max(0, win_y - 4)
-                wu.move_to(hwnd, win_x, win_y)
-            elif pet.y > WIN_H - 60 and win_y < SCREEN_H - WIN_H:
-                win_y = min(SCREEN_H - WIN_H, win_y + 4)
-                wu.move_to(hwnd, win_x, win_y)
-        else:
-            # 游走中接近边缘 → 移动窗口
-            margin = 90
+        # 游走中接近边缘 → 移动窗口
+        if not pet.dragging:
+            margin = 70
             moved = False
             if pet.x < margin and win_x > 0:
                 win_x = max(0, win_x - 3); moved = True
@@ -166,25 +205,18 @@ def main():
             if moved:
                 wu.move_to(hwnd, win_x, win_y)
 
-        wu.set_topmost(hwnd)
+        # 每 10 帧刷新置顶和裁剪
+        frame += 1
+        if frame % 10 == 0:
+            wu.set_topmost(hwnd)
+        if frame % 5 == 0:
+            update_clip()
 
+        # 气泡
         if bubble_timer > 0:
             bubble_timer -= 1
         else:
             bubble_text = ""
-
-        # ── 裁剪 ──
-        need_expand = menu.visible or (bubble_text and bubble_timer > 0)
-        if need_expand and not clip_expanded:
-            wu.set_rect_clip(hwnd, 0, 0, WIN_W, WIN_H)
-            clip_expanded = True
-        elif not need_expand and clip_expanded:
-            r = PET_RADIUS + 15
-            wu.set_round_clip(hwnd, pet.x, pet.y, r)
-            clip_expanded = False
-        elif not clip_expanded:
-            r = PET_RADIUS + 15
-            wu.set_round_clip(hwnd, pet.x, pet.y, r)
 
         # ── 绘制 ──
         screen.fill(COLORKEY)
