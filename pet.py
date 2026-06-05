@@ -1,10 +1,10 @@
-"""宠物实体 — 状态机、呼吸、游走、拖拽、点击"""
+"""宠物实体 — 状态机、呼吸、游走、拖拽"""
 import random
 import math
 import pygame
 from config import (
     PET_RADIUS, PET_COLOR,
-    WIN_W, WIN_H, FPS,
+    SCREEN_W, SCREEN_H, FPS,
     WALK_SPEED, IDLE_MIN, IDLE_MAX,
     BREATHE_SPEED, BREATHE_MIN, BREATHE_MAX,
 )
@@ -27,7 +27,7 @@ class Pet:
         self.expression = "normal"
         self.total_idle = 0
 
-        # 游走
+        # 游走目标（屏幕坐标）
         self.target_x = x
         self.target_y = y
 
@@ -36,8 +36,6 @@ class Pet:
 
         # 拖拽
         self.dragging = False
-        self.drag_start_x = 0
-        self.drag_start_y = 0
         self.drag_offset_x = 0
         self.drag_offset_y = 0
 
@@ -79,13 +77,12 @@ class Pet:
         pygame.draw.circle(screen, (0, 0, 0), (cx + offset, eye_y), radius)
 
     def _draw_happy_eyes(self, screen, cx, eye_y, r):
-        import pygame as pg
         offset = r // 3
         arc_r = r // 4
-        rect1 = pg.Rect(cx - offset - arc_r, eye_y - arc_r, arc_r * 2, arc_r * 2)
-        pg.draw.arc(screen, (0, 0, 0), rect1, math.pi, 2 * math.pi, max(1, r // 8))
-        rect2 = pg.Rect(cx + offset - arc_r, eye_y - arc_r, arc_r * 2, arc_r * 2)
-        pg.draw.arc(screen, (0, 0, 0), rect2, math.pi, 2 * math.pi, max(1, r // 8))
+        rect1 = pygame.Rect(cx - offset - arc_r, eye_y - arc_r, arc_r * 2, arc_r * 2)
+        pygame.draw.arc(screen, (0, 0, 0), rect1, math.pi, 2 * math.pi, max(1, r // 8))
+        rect2 = pygame.Rect(cx + offset - arc_r, eye_y - arc_r, arc_r * 2, arc_r * 2)
+        pygame.draw.arc(screen, (0, 0, 0), rect2, math.pi, 2 * math.pi, max(1, r // 8))
 
     def _draw_bored_eyes(self, screen, cx, eye_y, r):
         offset = r // 3
@@ -109,25 +106,23 @@ class Pet:
 
     def start_drag(self, mouse_x, mouse_y):
         self.dragging = True
-        self.drag_start_x = self.x
-        self.drag_start_y = self.y
         self.drag_offset_x = self.x - mouse_x
         self.drag_offset_y = self.y - mouse_y
-        self.state = "idle"
-        self.idle_timer = random.randint(IDLE_MIN, IDLE_MAX)
 
     def update_drag(self, mouse_x, mouse_y):
+        """拖拽：宠物直接跟随鼠标"""
         if self.dragging:
             self.x = mouse_x + self.drag_offset_x
             self.y = mouse_y + self.drag_offset_y
+            # 边界检测
+            self.x = max(self.radius, min(SCREEN_W - self.radius, self.x))
+            self.y = max(self.radius, min(SCREEN_H - self.radius, self.y))
 
     def end_drag(self):
-        if not self.dragging:
-            return
-        moved = abs(self.x - self.drag_start_x) + abs(self.y - self.drag_start_y)
-        if moved < 5:
-            self.handle_click()
+        """结束拖拽，判断是否算点击"""
         self.dragging = False
+        self.state = "idle"
+        self.idle_timer = random.randint(IDLE_MIN, IDLE_MAX)
 
     def _update_idle(self):
         self.breathe_phase += BREATHE_SPEED
@@ -139,9 +134,9 @@ class Pet:
             self._start_walking()
 
     def _start_walking(self):
-        margin = self.radius + 30
-        self.target_x = random.uniform(margin, WIN_W - margin)
-        self.target_y = random.uniform(margin, WIN_H - margin)
+        margin = self.radius + 20
+        self.target_x = random.uniform(margin, SCREEN_W - margin)
+        self.target_y = random.uniform(margin, SCREEN_H - margin)
         self.state = "walking"
 
     def _update_walking(self):

@@ -1,12 +1,12 @@
-"""桌宠入口 — 简洁版：固定窗口 + 内部菜单 + 品红透明"""
+"""桌宠入口 — pywin32 真透明全屏方案 (参考 DesktopPet-Ducky)"""
 import pygame
 import sys
 import random
 import subprocess
 import threading
 from config import (
-    WIN_W, WIN_H, SCREEN_W, SCREEN_H,
-    FPS, COLORKEY, WHITE, BLACK,
+    SCREEN_W, SCREEN_H,
+    FPS, TRANS_COLOR, WHITE, BLACK,
     FONT_PATH, FONT_SIZE_SMALL,
     PET_RADIUS, IS_WINDOWS,
 )
@@ -18,21 +18,22 @@ import window_utils as wu
 def main():
     pygame.init()
 
-    screen = pygame.display.set_mode((WIN_W, WIN_H), pygame.NOFRAME)
+    # 全屏无边框窗口
+    screen = pygame.display.set_mode((0, 0), pygame.NOFRAME)
     pygame.display.set_caption("桌宠")
-    screen.set_colorkey(COLORKEY)
-    clock = pygame.time.Clock()
 
     hwnd = wu.get_hwnd(pygame.display)
-
-    # 初始窗口位置
-    win_x = (SCREEN_W - WIN_W) // 2
-    win_y = (SCREEN_H - WIN_H) // 2
-    wu.move_to(hwnd, win_x, win_y)
+    wu.make_transparent(hwnd)  # 真透明（Windows 上）
     wu.set_topmost(hwnd)
 
-    # 宠物在窗口中央
-    pet = Pet(WIN_W // 2, WIN_H // 2)
+    clock = pygame.time.Clock()
+
+    # 黑色 = 透明的 surface
+    transparent_surface = pygame.Surface(screen.get_size())
+    transparent_surface.fill(TRANS_COLOR)
+
+    # 宠物在屏幕中央
+    pet = Pet(SCREEN_W // 2, SCREEN_H // 2)
 
     # ── 字体 ──
     try:
@@ -73,19 +74,18 @@ def main():
         threading.Thread(target=ask_hermes, args=(question,), daemon=True).start()
 
     jokes = [
-        "为什么程序员分不清万圣节和圣诞节？\n因为 Oct 31 == Dec 25！",
+        "为什么 Oct 31 == Dec 25？\n因为程序员用八进制算...",
         "SQL 走进酒吧：我能 JOIN 你们吗？",
         "bug 不叫 bug，叫未被文档记录的特性。",
     ]
 
-    # 菜单在窗口内显示，位置固定
     menu = Menu([
         ("讲个笑话", lambda: say(random.choice(jokes), 180)),
         ("你在干嘛？", lambda: say(_status_msg(pet), 120)),
         ("问 AI：今天学什么？",
-         lambda: ask_hermes_async("我是一名Java初学者，今天应该学什么？给简短建议")),
+         lambda: ask_hermes_async("我是Java初学者，今天学什么？给简短建议")),
         ("问 AI：随机小知识",
-         lambda: ask_hermes_async("给我一个有趣的编程小知识，简短")),
+         lambda: ask_hermes_async("有趣的编程冷知识，简短")),
         ("退出", lambda: _quit()),
     ], font_menu)
 
@@ -100,12 +100,10 @@ def main():
         pygame.quit()
         sys.exit()
 
-    # ── 裁剪（Windows 上默认圆形） ──
-    if IS_WINDOWS:
-        wu.set_round_clip(hwnd, pet.x, pet.y, PET_RADIUS + 10)
-
     # ── 主循环 ──
+    dragging = False
     frame = 0
+
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -114,77 +112,52 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = pygame.mouse.get_pos()
 
-                # 菜单优先
                 if menu.visible:
                     if menu.handle_click(mx, my):
-                        if IS_WINDOWS:
-                            wu.set_round_clip(hwnd, pet.x, pet.y, PET_RADIUS + 10)
                         continue
 
                 if event.button == 1:
+                    # 检查是否点在宠物上
                     dist = ((mx - pet.x) ** 2 + (my - pet.y) ** 2) ** 0.5
-                    if dist <= pet.radius + 10:
+                    if dist <= pet.radius + 15:
+                        dragging = True
                         pet.start_drag(mx, my)
 
                 elif event.button == 3:
                     dist = ((mx - pet.x) ** 2 + (my - pet.y) ** 2) ** 0.5
-                    if dist <= pet.radius + 10:
-                        # 菜单在窗口内，宠物下方偏左
-                        mx_menu = max(5, min(WIN_W - 150, int(pet.x) - 50))
-                        my_menu = max(5, min(WIN_H - 160, int(pet.y) + pet.radius + 10))
-                        menu.show(mx_menu, my_menu)
-                        if IS_WINDOWS:
-                            wu.set_rect_clip(hwnd, 0, 0, WIN_W, WIN_H)
+                    if dist <= pet.radius + 15:
+                        menu.show(
+                            int(pet.x) + 30,
+                            int(pet.y) - 100
+                        )
 
             elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 1:
+                if event.button == 1 and dragging:
+                    dragging = False
                     pet.end_drag()
-                    # 限制宠物在窗口内
-                    pet.x = max(20, min(WIN_W - 20, pet.x))
-                    pet.y = max(20, min(WIN_H - 20, pet.y))
-                    if IS_WINDOWS and not menu.visible:
-                        wu.set_round_clip(hwnd, pet.x, pet.y, PET_RADIUS + 10)
 
             elif event.type == pygame.MOUSEMOTION:
                 mx, my = pygame.mouse.get_pos()
-                pet.update_drag(mx, my)
+                if dragging:
+                    # 拖拽：宠物直接跟随鼠标
+                    pet.update_drag(mx, my)
                 menu.handle_mouse_move(mx, my)
 
         # ── 更新 ──
-        pet.update()
+        if not dragging:
+            pet.update()
 
-        # 游走中接近边缘 → 移动窗口（让宠物探索桌面）
-        if not pet.dragging and not menu.visible:
-            margin = 80
-            moved = False
-            if pet.x < margin and win_x > 0:
-                win_x = max(0, win_x - 2)
-                moved = True
-            elif pet.x > WIN_W - margin and win_x < SCREEN_W - WIN_W:
-                win_x = min(SCREEN_W - WIN_W, win_x + 2)
-                moved = True
-            if pet.y < margin and win_y > 0:
-                win_y = max(0, win_y - 2)
-                moved = True
-            elif pet.y > WIN_H - margin and win_y < SCREEN_H - WIN_H:
-                win_y = min(SCREEN_H - WIN_H, win_y + 2)
-                moved = True
-            if moved:
-                wu.move_to(hwnd, win_x, win_y)
-
-        # 定期刷新置顶
-        frame += 1
-        if frame % 30 == 0:
-            wu.set_topmost(hwnd)
-
-        # 气泡
         if bubble_timer > 0:
             bubble_timer -= 1
         else:
             bubble_text = ""
 
+        frame += 1
+        if frame % 30 == 0:
+            wu.set_topmost(hwnd)
+
         # ── 绘制 ──
-        screen.fill(COLORKEY)
+        screen.blit(transparent_surface, (0, 0))
 
         if bubble_text:
             _draw_bubble(screen, pet, bubble_text, font_small)
@@ -192,7 +165,7 @@ def main():
         pet.draw(screen)
         menu.draw(screen)
 
-        pygame.display.flip()
+        pygame.display.update()
         clock.tick(FPS)
 
 
