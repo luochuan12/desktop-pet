@@ -1,4 +1,4 @@
-"""桌宠入口 — 小窗口透明 + 菜单 + Hermes 联动（WSL 兼容）"""
+"""桌宠入口 — 跨平台透明窗口 + 菜单 + Hermes 联动"""
 import pygame
 import sys
 import random
@@ -8,59 +8,28 @@ from config import (
     WIN_W, WIN_H, SCREEN_W, SCREEN_H,
     FPS, COLORKEY, WHITE, BLACK,
     FONT_PATH, FONT_SIZE_SMALL,
+    PET_RADIUS, IS_WINDOWS,
 )
 from pet import Pet
 from menu import Menu
-
-
-def move_win(dx, dy):
-    """相对移动窗口（调用 wmctrl）"""
-    try:
-        subprocess.run(
-            ["wmctrl", "-r", "桌宠", "-e", f"0,-1,-1,-1,-1"],
-            capture_output=True, timeout=1
-        )
-        # wmctrl -e 是绝对位置，不太好用相对
-        # 用 xdotool 做相对移动
-    except Exception:
-        pass
-
-
-def move_win_to(x, y):
-    """移动窗口到绝对位置"""
-    try:
-        subprocess.run(
-            ["wmctrl", "-r", "桌宠", "-e", f"0,{x},{y},-1,-1"],
-            capture_output=True, timeout=1
-        )
-    except Exception:
-        pass
-
-
-def keep_on_top():
-    """保持窗口置顶"""
-    try:
-        subprocess.run(
-            ["wmctrl", "-r", "桌宠", "-b", "add,above"],
-            capture_output=True, timeout=1
-        )
-    except Exception:
-        pass
+import window_utils as wu
 
 
 def main():
     pygame.init()
 
-    # 使用 NOFRAME + 置顶提示
     screen = pygame.display.set_mode((WIN_W, WIN_H), pygame.NOFRAME)
     pygame.display.set_caption("桌宠")
     screen.set_colorkey(COLORKEY)
     clock = pygame.time.Clock()
 
+    hwnd = wu.get_hwnd(pygame.display)
+
     # 初始窗口位置（屏幕中央）
     win_x = (SCREEN_W - WIN_W) // 2
     win_y = (SCREEN_H - WIN_H) // 2
-    move_win_to(win_x, win_y)
+    wu.move_to(hwnd, win_x, win_y)
+    wu.set_topmost(hwnd)
 
     pet = Pet(WIN_W // 2, WIN_H // 2)
 
@@ -71,6 +40,9 @@ def main():
     except Exception:
         font_small = pygame.font.SysFont("arial", 12)
         font_menu = pygame.font.SysFont("arial", 13)
+
+    # ── 裁剪状态 ──
+    clip_expanded = False
 
     # ── 对话气泡 ──
     bubble_text = ""
@@ -88,7 +60,7 @@ def main():
             result = subprocess.run(
                 ["hermes", "chat", "-q", question, "-Q"],
                 capture_output=True, text=True, timeout=30,
-                cwd="/home/luochuan",
+                cwd="/home/luochuan" if not IS_WINDOWS else None,
             )
             answer = result.stdout.strip()
             if "session_id:" in answer:
@@ -129,27 +101,6 @@ def main():
         pygame.quit()
         sys.exit()
 
-    # ── 窗口边缘移动 ──
-    def check_edge_move():
-        """如果宠物接近窗口边缘，移动窗口"""
-        nonlocal win_x, win_y
-        margin = 90
-        moved = False
-        if pet.x < margin and win_x > 0:
-            win_x = max(0, win_x - 3)
-            moved = True
-        elif pet.x > WIN_W - margin and win_x < SCREEN_W - WIN_W:
-            win_x = min(SCREEN_W - WIN_W, win_x + 3)
-            moved = True
-        if pet.y < margin and win_y > 0:
-            win_y = max(0, win_y - 3)
-            moved = True
-        elif pet.y > WIN_H - margin and win_y < SCREEN_H - WIN_H:
-            win_y = min(SCREEN_H - WIN_H, win_y + 3)
-            moved = True
-        if moved:
-            move_win_to(win_x, win_y)
-
     # ── 主循环 ──
     while True:
         for event in pygame.event.get():
@@ -159,7 +110,6 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = pygame.mouse.get_pos()
 
-                # 菜单优先
                 if menu.visible:
                     if menu.handle_click(mx, my):
                         continue
@@ -189,30 +139,52 @@ def main():
         # 拖拽中移动窗口
         if pet.dragging:
             mx, my = pygame.mouse.get_pos()
-            # 如果宠物拖到边缘，移动窗口
-            if pet.x < 60:
+            if pet.x < 60 and win_x > 0:
                 win_x = max(0, win_x - 4)
-                move_win_to(win_x, win_y)
-            elif pet.x > WIN_W - 60:
+                wu.move_to(hwnd, win_x, win_y)
+            elif pet.x > WIN_W - 60 and win_x < SCREEN_W - WIN_W:
                 win_x = min(SCREEN_W - WIN_W, win_x + 4)
-                move_win_to(win_x, win_y)
-            if pet.y < 60:
+                wu.move_to(hwnd, win_x, win_y)
+            if pet.y < 60 and win_y > 0:
                 win_y = max(0, win_y - 4)
-                move_win_to(win_x, win_y)
-            elif pet.y > WIN_H - 60:
+                wu.move_to(hwnd, win_x, win_y)
+            elif pet.y > WIN_H - 60 and win_y < SCREEN_H - WIN_H:
                 win_y = min(SCREEN_H - WIN_H, win_y + 4)
-                move_win_to(win_x, win_y)
+                wu.move_to(hwnd, win_x, win_y)
         else:
-            check_edge_move()
+            # 游走中接近边缘 → 移动窗口
+            margin = 90
+            moved = False
+            if pet.x < margin and win_x > 0:
+                win_x = max(0, win_x - 3); moved = True
+            elif pet.x > WIN_W - margin and win_x < SCREEN_W - WIN_W:
+                win_x = min(SCREEN_W - WIN_W, win_x + 3); moved = True
+            if pet.y < margin and win_y > 0:
+                win_y = max(0, win_y - 3); moved = True
+            elif pet.y > WIN_H - margin and win_y < SCREEN_H - WIN_H:
+                win_y = min(SCREEN_H - WIN_H, win_y + 3); moved = True
+            if moved:
+                wu.move_to(hwnd, win_x, win_y)
 
-        # 置顶
-        keep_on_top()
+        wu.set_topmost(hwnd)
 
-        # 气泡
         if bubble_timer > 0:
             bubble_timer -= 1
         else:
             bubble_text = ""
+
+        # ── 裁剪 ──
+        need_expand = menu.visible or (bubble_text and bubble_timer > 0)
+        if need_expand and not clip_expanded:
+            wu.set_rect_clip(hwnd, 0, 0, WIN_W, WIN_H)
+            clip_expanded = True
+        elif not need_expand and clip_expanded:
+            r = PET_RADIUS + 15
+            wu.set_round_clip(hwnd, pet.x, pet.y, r)
+            clip_expanded = False
+        elif not clip_expanded:
+            r = PET_RADIUS + 15
+            wu.set_round_clip(hwnd, pet.x, pet.y, r)
 
         # ── 绘制 ──
         screen.fill(COLORKEY)
