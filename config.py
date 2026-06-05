@@ -1,43 +1,31 @@
-"""桌宠配置常量"""
-import os
+"""桌宠配置"""
 import sys
-import pygame
 
-pygame.init()
-INFO = pygame.display.Info()
-SCREEN_W = INFO.current_w
-SCREEN_H = INFO.current_h
+IS_WINDOWS = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
 
 FPS = 30
+FRAME_MS = 1000 // FPS
 
-# ── 平台检测 ──
-IS_WINDOWS = sys.platform == "win32"
+# 宠物
+PET_SIZE = 80
 
-# 透明色（Windows 用黑色 = pywin32 真透明, Linux/WSL 用品红 = colorkey）
-TRANS_COLOR = (0, 0, 0) if IS_WINDOWS else (255, 0, 255)
+# 游走
+WALK_SPEED = 3
+IDLE_MIN_MS = 2000
+IDLE_MAX_MS = 6000
+
+# 颜色
+WHITE = "#FFFFFF"
+BLACK = "#000000"
+PET_COLOR = "#64B4FF"
+BG_COLOR = "black"
+HIGHLIGHT_COLOR = "#C8DCFF"
 
 # 字体
 if IS_WINDOWS:
-    FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
+    FONT = ("Microsoft YaHei", 10)
+    FONT_SMALL = ("Microsoft YaHei", 9)
 else:
-    FONT_PATH = "/mnt/c/Windows/Fonts/msyh.ttc"
-if not os.path.exists(FONT_PATH):
-    FONT_PATH = None
-
-FONT_SIZE = 13
-FONT_SIZE_SMALL = 12
-
-# 颜色
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-
-PET_RADIUS = 40
-PET_COLOR = (100, 180, 255)
-
-WALK_SPEED = 2.0
-IDLE_MIN = 60
-IDLE_MAX = 180
-
-BREATHE_SPEED = 0.02
-BREATHE_MIN = 0.95
-BREATHE_MAX = 1.05
+    FONT = ("sans-serif", 10)
+    FONT_SMALL = ("sans-serif", 9)
